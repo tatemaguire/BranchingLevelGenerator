@@ -3,9 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="./index.css">
     <title>Branching Level Generator</title>
 </head>
 <body>
-    Branching Level Generator!!!
+    <h1>Branching Level Generator!!!</h1>
+    <p>Input the length of the sequence</p>
+    <input type="number" id="lengthInput" value="5">
+    <p>Input the width (maximum parallel paths) of the sequence</p>
+    <input type="number" id="widthInput" value="5">
+    <br>
+    <br>
+    <button id="generateButton">Generate!</button>
+    <br>
+    <br>
+    <canvas id="outputCanvas" width="1000" height="500"></canvas>
 </body>
+<script src="./index.js"></script>
 </html>
