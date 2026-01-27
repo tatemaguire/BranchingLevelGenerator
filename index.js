@@ -25,7 +25,22 @@ function generateLevel() {
     const length = document.getElementById("lengthInput").value;
     const width = document.getElementById("widthInput").value;
 
-    graphLevel(testLevel);
+    const initSection = { nodes: [ { outs: 1 } ] };
+    let level = [ generateSection(initSection, width, width) ];
+
+    for (let i = 1; i < length; i++) {
+        const nextWidth = Math.min(width, length - i);
+        let newSection = generateSection(level[i-1], width, nextWidth);
+        level.push(newSection);
+    }
+
+    let prevSection = initSection;
+    for (let section of level) {
+        linkSection(section, prevSection)
+        prevSection = section;
+    }
+
+    graphLevel(level);
 }
 
 // minNodes = largest "outs" number from the previous section's nodes
@@ -33,18 +48,66 @@ function generateLevel() {
 // totalIns = the total outs from the previous section
 // maxInNum = the maximum ins a node can have = the number of nodes in the previous section
 // returns a section
-function generateSection(minNodes, maxNodes, totalIns, maxInNum) {
 
+// i need: total outs, num of nodes, the largest outsf
+function generateSection(prevSection, width, nextWidth) {
+    let largestOut = 0;
+    let totalOuts = 0;
+    for (const node of prevSection.nodes) {
+        totalOuts += node.outs;
+        if (node.outs > largestOut) {
+            largestOut = node.outs;
+        }
+    }
+
+    const sectionWidth = randInt(largestOut, width);
+
+    // find combination where:
+    // 1. total ins === totalOuts
+    // 2. has sectionWidth
+    // 3. each ins num is <= prevSection.nodes.length
+    // 4. each outs num is <= nextWidth
+
+    let sectionNodes = [];
+    let totalIns = 0;
+
+    for (let i = 0; i < sectionWidth; i++) {
+        let possibleNodes = [];
+        console.log(prevSection.nodes.length, (totalOuts - totalIns), nextWidth);
+        for (const node of defaultNodes) {
+            let valid = true;
+            if (node.ins > prevSection.nodes.length) valid = false;
+            if (node.ins > totalOuts - totalIns) valid = false;
+            if (node.outs > nextWidth) valid = false;
+
+            if (valid) possibleNodes.push(node);
+        }
+
+        if (possibleNodes.length < 1) break;
+
+        const newNode = possibleNodes[randInt(0, possibleNodes.length-1)];
+        totalIns += newNode.ins;
+        sectionNodes.push(newNode);
+    }
+
+    console.log(sectionNodes);
+
+    return {nodes: sectionNodes};
+    
 }
 
 // returns a backwards directed adjacency list. 
 // the index of the node in this section followed by a list of nodes in the prev section
 function linkSection(section, prevSection) {
-
+    let adjacencies = [];
+    for (let node of section.nodes) {
+        adjacencies.push([0]);
+    }
+    section.adjacencies = adjacencies;
 }
 
 function getNode(nodes, name) {
-    for (let n of nodes) {
+    for (const n of nodes) {
         if (n.name === name) return n;
     }
 }
@@ -133,6 +196,9 @@ let testLevel = [
 ]
 
 function graphLevel(level) {
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+
     let x = 10;
     let y = 10;
 
@@ -145,9 +211,9 @@ function graphLevel(level) {
     ctx.beginPath();
 
     // draw the bulk of the level, section by section
-    for (let section of level) {
+    for (const section of level) {
         // draw nodes
-        for (let node of section.nodes) {
+        for (const node of section.nodes) {
             ctx.fillStyle = "rgb(190, 190, 190)";
             drawNode(node, x, y, 100, 50)
             y += 60;
@@ -195,4 +261,13 @@ function drawNode(node, x, y, w, h) {
     ctx.fillText(node.ins, x+4, y+(h/2), w);
     ctx.textAlign = "right";
     ctx.fillText(node.outs, x+w-4, y+(h/2), w);
+}
+
+// -------------------------------------------------
+// Helper Functions
+// -------------------------------------------------
+
+// Random integer inclusive
+function randInt(min, max) {
+    return min + Math.floor(Math.random() * (max - min + 1))
 }
