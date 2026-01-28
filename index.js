@@ -25,8 +25,6 @@ generateButton.addEventListener("click", generateLevel);
 const outputCanvas = document.getElementById("outputCanvas");
 const ctx = outputCanvas.getContext("2d");
 
-// make sure 2 outs of one node never go to the two ins of another node
-// the total nodes per step has to stay under width but also fluctuate throughout
 function generateLevel() {
     const length = document.getElementById("lengthInput").value;
     const width = document.getElementById("widthInput").value;
@@ -35,8 +33,12 @@ function generateLevel() {
     generateConnections(level);
     assignNames(level);
 
-    graphLevel(level);
+    drawLevel(level);
 }
+
+// ------------------------------------
+// Generation
+// ------------------------------------
 
 function generateNodes(length, maxWidth) {
     let levelWidths = [];
@@ -159,21 +161,6 @@ function generateConnections(level) {
     }
 }
 
-function getLargestIncompleteNodeIndex(nodes, property, completed) {
-    let largest = 0;
-    let largestIndex = null;
-    for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-
-        if (node[property] > largest && !completed[i]) {
-            largest = node[property];
-            largestIndex = i;
-
-        }
-    }
-    return largestIndex;
-}
-
 function assignNames(level) {
     for (let section of level) {
         for (let node of section.nodes) {
@@ -183,13 +170,11 @@ function assignNames(level) {
     }
 }
 
-function getNode(nodes, name) {
-    for (const n of nodes) {
-        if (n.name === name) return n;
-    }
-}
+// ------------------------------------
+// Visualization
+// ------------------------------------
 
-function graphLevel(level) {
+function drawLevel(level) {
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
 
@@ -264,4 +249,22 @@ function drawNode(node, x, y, w, h) {
 // Random integer inclusive
 function randInt(min, max) {
     return min + Math.floor(Math.random() * (max - min + 1))
+}
+
+// im not cleaning up this mess sorry 
+// but basically out of the list "nodes", find the largest node.property
+// that is also marked as completed in the associated array "completed"
+// then return the index of that node
+function getLargestIncompleteNodeIndex(nodes, property, completed) {
+    let largest = 0;
+    let largestIndex = null;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+
+        if (node[property] > largest && !completed[i]) {
+            largest = node[property];
+            largestIndex = i;
+        }
+    }
+    return largestIndex;
 }
