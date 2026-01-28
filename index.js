@@ -1,17 +1,23 @@
-const defaultNodes = [
-    { name: "road split", ins: 1, outs: 2},
-    { name: "intersection", ins: 2, outs: 2},
-    { name: "roundabout", ins: 1, outs: 3},
-    { name: "road merge", ins: 2, outs: 1},
-    { name: "plaza", ins: 3, outs: 2},
-    { name: "alley", ins: 1, outs: 1},
-    { name: "avenue", ins: 1, outs: 1},
-    { name: "stairway", ins: 1, outs: 2},
-    { name: "subway station", ins: 2, outs: 1},
-    { name: "tunnel", ins: 1, outs: 1},
-    { name: "bridge", ins: 2, outs: 1},
-    { name: "riverside path", ins: 1, outs: 1},
-]
+// NODE_NAMES[ins - 1][outs - 1] = list of names
+const NODE_NAMES = [
+    [
+        ["alley", "avenue", "tunnel", "riverside path"], // 1:1
+        ["road split", "stairway"], // 1:2
+        ["roundabout"], // 1:3
+    ],
+    [
+        ["road merge", "subway station", "bridge"], // 2:1
+        ["intersection"], // 2:2
+        ["park"], // 2:3
+    ],
+    [
+        ["shopping mall"], // 3:1
+        ["plaza"], // 3:2
+        ["city center"], // 3:3
+    ],
+];
+
+const MAX_CONNECTIONS = 3;
 
 const generateButton = document.getElementById("generateButton");
 generateButton.addEventListener("click", generateLevel);
@@ -25,85 +31,156 @@ function generateLevel() {
     const length = document.getElementById("lengthInput").value;
     const width = document.getElementById("widthInput").value;
 
-    const initSection = { nodes: [ { outs: 1 } ] };
-    let level = [ generateSection(initSection, width, width) ];
-
-    for (let i = 1; i < length; i++) {
-        const nextWidth = Math.min(width, length - i);
-        let newSection = generateSection(level[i-1], width, nextWidth);
-        level.push(newSection);
-    }
-
-    let prevSection = initSection;
-    for (let section of level) {
-        linkSection(section, prevSection)
-        prevSection = section;
-    }
+    let level = generateNodes(length, width);
+    generateConnections(level);
+    assignNames(level);
 
     graphLevel(level);
 }
 
-// minNodes = largest "outs" number from the previous section's nodes
-// maxNodes = width
-// totalIns = the total outs from the previous section
-// maxInNum = the maximum ins a node can have = the number of nodes in the previous section
-// returns a section
+function generateNodes(length, maxWidth) {
+    let levelWidths = [];
 
-// i need: total outs, num of nodes, the largest outsf
-function generateSection(prevSection, width, nextWidth) {
-    let largestOut = 0;
-    let totalOuts = 0;
-    for (const node of prevSection.nodes) {
-        totalOuts += node.outs;
-        if (node.outs > largestOut) {
-            largestOut = node.outs;
+    for (let i = 0; i < length; i++) {
+        // determine maximum/minimum possible width for this section
+        // depends on previous section width, and distance from the end of the level
+        let sectionMax = maxWidth;
+        let sectionMin = 1;
+        if (i === 0) {
+            sectionMax = 1;
+        } else {
+            const maxFromPrev = levelWidths[i-1] * MAX_CONNECTIONS;
+            if (maxFromPrev < sectionMax) sectionMax = maxFromPrev;
+
+            const minFromPrev = Math.ceil(levelWidths[i-1] / MAX_CONNECTIONS);
+            if (minFromPrev > sectionMin) sectionMin = minFromPrev;
         }
+        const endLimit = Math.pow(MAX_CONNECTIONS, length-1 - i);
+        if (endLimit < sectionMax) sectionMax = endLimit;
+
+        // select width
+        levelWidths.push(randInt(sectionMin, sectionMax));
     }
 
-    const sectionWidth = randInt(largestOut, width);
-
-    // find combination where:
-    // 1. total ins === totalOuts
-    // 2. has sectionWidth
-    // 3. each ins num is <= prevSection.nodes.length
-    // 4. each outs num is <= nextWidth
-
-    let sectionNodes = [];
-    let totalIns = 0;
-
-    for (let i = 0; i < sectionWidth; i++) {
-        let possibleNodes = [];
-        console.log(prevSection.nodes.length, (totalOuts - totalIns), nextWidth);
-        for (const node of defaultNodes) {
-            let valid = true;
-            if (node.ins > prevSection.nodes.length) valid = false;
-            if (node.ins > totalOuts - totalIns) valid = false;
-            if (node.outs > nextWidth) valid = false;
-
-            if (valid) possibleNodes.push(node);
-        }
-
-        if (possibleNodes.length < 1) break;
-
-        const newNode = possibleNodes[randInt(0, possibleNodes.length-1)];
-        totalIns += newNode.ins;
-        sectionNodes.push(newNode);
-    }
-
-    console.log(sectionNodes);
-
-    return {nodes: sectionNodes};
+    console.assert(levelWidths.length == length, levelWidths.length);
     
+    // generate sections with empty nodes
+    let level = [];
+    for (const w of levelWidths) {
+        let section = { nodes: [] };
+        for (let i = 0; i < w; i++) {
+            section.nodes.push({});
+        }
+        level.push(section);
+    }
+    
+    console.assert(level.length == length, level.length);
+
+    return level;
 }
 
-// returns a backwards directed adjacency list. 
-// the index of the node in this section followed by a list of nodes in the prev section
-function linkSection(section, prevSection) {
-    let adjacencies = [];
-    for (let node of section.nodes) {
-        adjacencies.push([0]);
+function generateConnections(level) {
+    level[0].nodes[0].ins = 1;
+    level[0].adjacencies = [[0]];
+
+    level[level.length-1].nodes[0].outs = 1;
+
+    for (let i = 0; i < level.length - 1; i++) {
+        const w1 = level[i].nodes.length;
+        const w2 = level[i+1].nodes.length;
+
+        const minConn = Math.max(w1, w2);
+        const maxConn = Math.min(w1 * w2, w1 * MAX_CONNECTIONS, w2 * MAX_CONNECTIONS);
+
+        const numConnections = randInt(minConn, maxConn);
+
+        // assign out counts for level[i]
+        let connsRemaining = numConnections;
+        let subsequentNodes = w1 - 1;
+        for (let node of level[i].nodes) {
+            const maxOuts = Math.min(MAX_CONNECTIONS, w2, connsRemaining - subsequentNodes);
+            const minOuts = Math.max(1, connsRemaining - (subsequentNodes * Math.min(MAX_CONNECTIONS, w2)));
+
+            console.assert(maxOuts >= minOuts, maxOuts, minOuts);
+
+            const outs = randInt(minOuts, maxOuts);
+            node.outs = outs;
+
+            connsRemaining -= outs;
+            subsequentNodes--;
+        }
+        
+        // assign in counts for level[i+1]
+        connsRemaining = numConnections;
+        subsequentNodes = w2 - 1;
+        for (let node of level[i+1].nodes) {
+            const maxIns = Math.min(MAX_CONNECTIONS, w1, connsRemaining - subsequentNodes);
+            const minIns = Math.max(1, connsRemaining - (subsequentNodes * Math.min(MAX_CONNECTIONS, w1)));
+
+            console.assert(maxIns >= minIns, maxIns, minIns);
+
+            const ins = randInt(minIns, maxIns);
+            node.ins = ins;
+
+            connsRemaining -= ins;
+            subsequentNodes--;
+        }
+        
+        // assign adjacencies for level[i+1]
+        level[i+1].adjacencies = [];
+        let completed = []
+        for (let j = 0; j < w2; j++) {
+            completed.push(false);
+            level[i+1].adjacencies.push([]);
+        }
+
+        let availableOuts = [];
+        for (let node of level[i].nodes) {
+            availableOuts.push({outs: node.outs});
+        }
+
+        while (completed.some((arg) => { return !arg; })) {
+            let targetIndex = getLargestIncompleteNodeIndex(level[i+1].nodes, "ins", completed);
+            let targetNode = level[i+1].nodes[targetIndex];
+
+            let touched = [];
+            for (let node of level[i].nodes) {
+                touched.push(false);
+            }
+
+            for (let j = 0; j < targetNode.ins; j++) {
+                let goalIndex = getLargestIncompleteNodeIndex(availableOuts, "outs", touched);
+                touched[goalIndex] = true;
+                availableOuts[goalIndex].outs--;
+                level[i+1].adjacencies[targetIndex].push(goalIndex);
+            }
+            completed[targetIndex] = true;
+        }
     }
-    section.adjacencies = adjacencies;
+}
+
+function getLargestIncompleteNodeIndex(nodes, property, completed) {
+    let largest = 0;
+    let largestIndex = null;
+    for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+
+        if (node[property] > largest && !completed[i]) {
+            largest = node[property];
+            largestIndex = i;
+
+        }
+    }
+    return largestIndex;
+}
+
+function assignNames(level) {
+    for (let section of level) {
+        for (let node of section.nodes) {
+            const possibleNames = NODE_NAMES[node.ins-1][node.outs-1];
+            node.name = possibleNames[randInt(0, possibleNames.length-1)];
+        }
+    }
 }
 
 function getNode(nodes, name) {
@@ -111,89 +188,6 @@ function getNode(nodes, name) {
         if (n.name === name) return n;
     }
 }
-
-let testLevel = [
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "tunnel"),
-        ],
-        adjacencies: 
-        [
-            [0],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "roundabout"),
-        ],
-        adjacencies: 
-        [
-            [0],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "alley"),
-            getNode(defaultNodes, "avenue"),
-            getNode(defaultNodes, "stairway"),
-        ],
-        adjacencies: 
-        [
-            [0],
-            [0],
-            [0],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "road merge"),
-            getNode(defaultNodes, "tunnel"),
-            getNode(defaultNodes, "riverside path"),
-        ],
-        adjacencies: 
-        [
-            [1, 2],
-            [2],
-            [0],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "plaza"),
-        ],
-        adjacencies: 
-        [
-            [0, 1, 2],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "avenue"),
-            getNode(defaultNodes, "riverside path"),
-        ],
-        adjacencies: 
-        [
-            [0],
-            [0],
-        ],
-    },
-    {
-        nodes: 
-        [ 
-            getNode(defaultNodes, "bridge"),
-        ],
-        adjacencies: 
-        [
-            [0, 1],
-        ],
-    },
-]
 
 function graphLevel(level) {
     ctx.fillStyle = "white";
